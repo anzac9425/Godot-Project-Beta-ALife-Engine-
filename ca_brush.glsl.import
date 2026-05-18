@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://cbu3t5yj2cvv1"
+path="res://.godot/imported/ca_brush.glsl-583b137b84b67b986207f3f3e71251e2.res"
+
+[deps]
+
+source_file="res://ca_brush.glsl"
+dest_files=["res://.godot/imported/ca_brush.glsl-583b137b84b67b986207f3f3e71251e2.res"]
+
+[params]
+
