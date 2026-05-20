@@ -1,10 +1,10 @@
 [gd_scene format=3 uid="uid://e7qb8eenajuu"]
 
-[ext_resource type="Script" uid="uid://bq4lnbigr3ccv" path="res://world.gd" id="1_f3sb7"]
+[ext_resource type="Script" uid="uid://ccqtug4cb7nnj" path="res://world.gd" id="1_fj7yv"]
 [ext_resource type="Script" uid="uid://c5p5xauhammne" path="res://camera_2d.gd" id="2_fj7yv"]
 
 [node name="World" type="Node2D" unique_id=139563559]
-script = ExtResource("1_f3sb7")
+script = ExtResource("1_fj7yv")
 
 [node name="TextureRect" type="TextureRect" parent="." unique_id=1787697134]
 anchors_preset = 8

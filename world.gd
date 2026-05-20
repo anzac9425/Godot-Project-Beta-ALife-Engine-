@@ -63,12 +63,16 @@ var brush_color  : Color    = Color(1, 1, 1, 1.0)
 @onready var output_rect: TextureRect = $TextureRect
 var display_tex := Texture2DRD.new()
 
+var kernel_tex : RID
+var kernel_view : RID
+
 
 func _ready() -> void:
 	randomize()
 	rd = RenderingServer.get_rendering_device()
 
 	_apply_preset(preset_id)
+	_rebuild_kernel_table()
 	_create_textures()
 	_create_sampler()
 	_compile_shaders()
@@ -84,47 +88,46 @@ func _apply_preset(id: PresetId) -> void:
 		PresetId.BASELINE:
 			grid_width = 256
 			grid_height = 256
-			steps_per_frame = 4
+			steps_per_frame = 2
 
-			mu_r = 0.068
-			mu_g = 0.118
-			mu_b = 0.205
+			# field01 = scaffold / membrane
+			# field02 = pressure / metabolism
+			# field03 = signal / repair
+			mu_r = 0.085
+			mu_g = 0.145
+			mu_b = 0.225
 
-			sigma_r = 0.014
-			sigma_g = 0.038
-			sigma_b = 0.082
+			sigma_r = 0.020
+			sigma_g = 0.040
+			sigma_b = 0.075
 
-			dt = 0.0016
+			dt = 0.0026
 
-			kernel_radius_r = 3.0
-			kernel_radius_g = 7.0
-			kernel_radius_b = 18.0
+			kernel_radius_r = 28.0
+			kernel_radius_g = 16.0
+			kernel_radius_b = 8.0
 
-			brush_radius = 10
-			brush_color = Color(1,0,0,1)
+			seed_r = 0.012
+			seed_g = 0.004
+			seed_b = 0.001
 
-			seed_r = 0.0
-			seed_g = 0.0
-			seed_b = 0.0
+			coeff_rr = 0.42
+			coeff_rg = -0.10
+			coeff_rb = -0.14
 
+			coeff_gr = 0.30
+			coeff_gg = 0.18
+			coeff_gb = -0.06
 
-			coeff_rr = 0.14
-			coeff_rg = -0.06
-			coeff_rb = -0.08
-
-			coeff_gr = 0.18
-			coeff_gg = 0.10
-			coeff_gb = -0.04
-
-			coeff_br = -0.02
-			coeff_bg = 0.16
-			coeff_bb = -0.10
+			coeff_br = -0.22
+			coeff_bg = 0.26
+			coeff_bb = 0.08
 	
 	
 		PresetId.FIRST:
 			grid_width = 256
 			grid_height = 256
-			steps_per_frame = 4
+			steps_per_frame = 2
 
 			mu_r = 0.11     # membrane
 			mu_g = 0.18     # metabolism
@@ -192,7 +195,7 @@ func _create_sampler() -> void:
 
 
 func _compile_shaders() -> void:
-	sim_shader   = _load_shader("res://ca_sim.glsl")
+	sim_shader   = _load_shader("res://cd_sim.glsl")
 	brush_shader = _load_shader("res://ca_brush.glsl")
 	sim_pipeline   = rd.compute_pipeline_create(sim_shader)
 	brush_pipeline = rd.compute_pipeline_create(brush_shader)
@@ -217,7 +220,13 @@ func _make_sim_set(src_view: RID, dst_tex: RID) -> RID:
 	u1.binding = 1
 	u1.add_id(dst_tex)
 
-	return rd.uniform_set_create([u0, u1], sim_shader, 0)
+	var u2 := RDUniform.new()
+	u2.uniform_type = RenderingDevice.UNIFORM_TYPE_SAMPLER_WITH_TEXTURE
+	u2.binding = 2
+	u2.add_id(sampler_rid)
+	u2.add_id(kernel_view)
+
+	return rd.uniform_set_create([u0, u1, u2], sim_shader, 0)
 
 
 func _make_brush_set(field_tex: RID) -> RID:
@@ -243,6 +252,79 @@ func _process(_delta: float) -> void:
 
 	rd.compute_list_end()
 	_update_output_texture()
+	
+
+func _kernel_weight(d: float, radius: float) -> float:
+	if radius <= 0.0 or d > radius:
+		return 0.0
+	var half_r := radius * 0.5
+	var inv_band := 5.0 / radius
+	var t := (d - half_r) * inv_band
+	return exp(-t * t)
+
+func _rebuild_kernel_table() -> void:
+	var rmax := int(ceil(max(kernel_radius_r, max(kernel_radius_g, kernel_radius_b))))
+	var side := rmax * 2 + 1
+
+	var data := PackedFloat32Array()
+	data.resize(side * side * 4)
+
+	var sum_r := 0.0
+	var sum_g := 0.0
+	var sum_b := 0.0
+
+	var idx := 0
+	for y in range(-rmax, rmax + 1):
+		for x in range(-rmax, rmax + 1):
+			var d := sqrt(float(x * x + y * y))
+
+			var wr := _kernel_weight(d, kernel_radius_r)
+			var wg := _kernel_weight(d, kernel_radius_g)
+			var wb := _kernel_weight(d, kernel_radius_b)
+
+			data[idx + 0] = wr
+			data[idx + 1] = wg
+			data[idx + 2] = wb
+			data[idx + 3] = 0.0
+
+			sum_r += wr
+			sum_g += wg
+			sum_b += wb
+			idx += 4
+
+	var inv_sum_r: float = 1.0 / sum_r
+	var inv_sum_g: float = 1.0 / sum_g
+	var inv_sum_b: float = 1.0 / sum_b
+
+	idx = 0
+	for _i in range(side * side):
+		data[idx + 0] *= inv_sum_r
+		data[idx + 1] *= inv_sum_g
+		data[idx + 2] *= inv_sum_b
+		idx += 4
+
+	var fmt := RDTextureFormat.new()
+	fmt.format = RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
+	fmt.width = side
+	fmt.height = side
+	fmt.depth = 1
+	fmt.array_layers = 1
+	fmt.mipmaps = 1
+	fmt.texture_type = RenderingDevice.TEXTURE_TYPE_2D
+	fmt.usage_bits = (
+		RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT |
+		RenderingDevice.TEXTURE_USAGE_CAN_UPDATE_BIT |
+		RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT
+	)
+
+	if kernel_tex.is_valid():
+		rd.free_rid(kernel_tex)
+	if kernel_view.is_valid():
+		rd.free_rid(kernel_view)
+
+	kernel_tex = rd.texture_create(fmt, RDTextureView.new(), [])
+	kernel_view = rd.texture_create_shared(RDTextureView.new(), kernel_tex)
+	rd.texture_update(kernel_tex, 0, data.to_byte_array())
 
 
 func _dispatch_simulation(cl: int) -> void:
@@ -251,24 +333,22 @@ func _dispatch_simulation(cl: int) -> void:
 	rd.compute_list_bind_compute_pipeline(cl, sim_pipeline)
 	rd.compute_list_bind_uniform_set(cl, sim_set, 0)
 
-	# 24 floats = 96 bytes.  Order MUST match layout(push_constant) in ca_simulation.glsl.
-	# Vulkan requires push constant size to be a multiple of 16 bytes (4 floats);
-
+	# 18 floats = 72 bytes.
+	# Order MUST match layout(push_constant) in test.glsl.
 	var push := PackedFloat32Array([
 		float(grid_width), float(grid_height), dt,
 		mu_r, mu_g, mu_b,
 		sigma_r, sigma_g, sigma_b,
-		kernel_radius_r, kernel_radius_g, kernel_radius_b,
 		coeff_rr, coeff_rg, coeff_rb,
 		coeff_gr, coeff_gg, coeff_gb,
 		coeff_br, coeff_bg, coeff_bb,
-		0.0, 0.0, 0.0
+		0.0, 0.0
 	])
 
 	rd.compute_list_set_push_constant(cl, push.to_byte_array(), push.size() * 4)
 
-	var gx := ceili(float(grid_width) / 8.0)
-	var gy := ceili(float(grid_height) / 8.0)
+	var gx := ceili(float(grid_width) / 16.0)
+	var gy := ceili(float(grid_height) / 16.0)
 	rd.compute_list_dispatch(cl, gx, gy, 1)
 	rd.compute_list_add_barrier(cl)
 
@@ -376,6 +456,7 @@ func _set_brush_from_screen_pos(screen_pos: Vector2) -> bool:
 func _exit_tree() -> void:
 	for rid : RID in [
 		tex_a, tex_b, tex_a_view, tex_b_view,
+		kernel_tex, kernel_view,
 		sampler_rid,
 		sim_pipeline, brush_pipeline,
 		sim_shader, brush_shader,
