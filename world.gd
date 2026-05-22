@@ -1,6 +1,6 @@
 extends Node
 
-enum PresetId { BASELINE, FIRST }
+enum PresetId { BASELINE, FIRST, TEST }
 @export var preset_id : PresetId = PresetId.BASELINE
 
 var rd : RenderingDevice
@@ -86,42 +86,42 @@ func _ready() -> void:
 func _apply_preset(id: PresetId) -> void:
 	match id:
 		PresetId.BASELINE:
-			grid_width = 256
-			grid_height = 256
-			steps_per_frame = 2
+			grid_width = 512
+			grid_height = 512
+			steps_per_frame = 1
 
-			# field01 = scaffold / membrane
-			# field02 = pressure / metabolism
-			# field03 = signal / repair
-			mu_r = 0.085
-			mu_g = 0.145
-			mu_b = 0.225
+			mu_r = 0.11     # membrane
+			mu_g = 0.18     # metabolism
+			mu_b = 0.23     # signaling
 
-			sigma_r = 0.020
-			sigma_g = 0.040
-			sigma_b = 0.075
+			sigma_r = 0.030
+			sigma_g = 0.060
+			sigma_b = 0.100
 
-			dt = 0.0026
+			dt = 0.008
 
-			kernel_radius_r = 28.0
-			kernel_radius_g = 16.0
-			kernel_radius_b = 8.0
+			kernel_radius_r = 12.0
+			kernel_radius_g = 18.0
+			kernel_radius_b = 24.0
 
-			seed_r = 0.012
-			seed_g = 0.004
-			seed_b = 0.001
+			brush_radius = 10
+			brush_color = Color(1,0,0,1)
 
-			coeff_rr = 0.42
+			seed_r = 0.006
+			seed_g = 0.010
+			seed_b = 0.004
+
+			coeff_rr = 0.34
 			coeff_rg = -0.10
-			coeff_rb = -0.14
+			coeff_rb = -0.08
 
-			coeff_gr = 0.30
-			coeff_gg = 0.18
-			coeff_gb = -0.06
+			coeff_gr = 0.26
+			coeff_gg = 0.14
+			coeff_gb = -0.03
 
-			coeff_br = -0.22
-			coeff_bg = 0.26
-			coeff_bb = 0.08
+			coeff_br = -0.18
+			coeff_bg = 0.28
+			coeff_bb = 0.02
 	
 	
 		PresetId.FIRST:
@@ -161,6 +161,45 @@ func _apply_preset(id: PresetId) -> void:
 			coeff_br = -0.18
 			coeff_bg = 0.28
 			coeff_bb = 0.02
+			
+		PresetId.TEST:
+
+			grid_width = 256
+			grid_height = 256
+			steps_per_frame = 1
+
+			mu_r = 0.13
+			mu_g = 0.19
+			mu_b = 0.20
+
+			sigma_r = 0.028
+			sigma_g = 0.031
+			sigma_b = 0.043
+
+			dt = 0.01
+
+			kernel_radius_r = 40.0
+			kernel_radius_g = 5.0
+			kernel_radius_b = 10.0
+
+			seed_r = 0.030
+			seed_g = 0.018
+			seed_b = 0.008
+
+			# body stability
+			coeff_rr = 0.42
+			coeff_rg = -0.08
+			coeff_rb = 0.04
+
+			# contraction layer
+			coeff_gr = 0.24
+			coeff_gg = 0.16
+			coeff_gb = -0.04
+
+			# sensory/tip layer
+			coeff_br = -0.04
+			coeff_bg = 0.30
+			coeff_bb = 0.06
 
 
 func _create_textures() -> void:
